@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
 	"os"
 	"runtime"
 	"sort"
@@ -35,11 +38,15 @@ func (n nameSums) Swap(i, j int) {
 
 func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 	for m := range metricStream {
+		cls := map[string]uint64{}
 		nvs := nameSums{}
 		fmt.Printf("\n%d\n", time.Now().Unix())
-		fmt.Println("     Sum     Rate Verb Path")
 		for k, v := range m.Metrics {
 			if strings.HasSuffix(k, "_rate") {
+				continue
+			}
+			if strings.HasPrefix(k, "ContentLength") {
+				cls[k] = uint64(v)
 				continue
 			}
 			nvs = append(nvs, nameSum{
@@ -52,9 +59,23 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 			continue
 		}
 		sort.Sort(nvs)
+		fmt.Printf("Top %d most popular http requests:\n", topK)
+		fmt.Println("     Sum     Rate Verb Path")
 		for _, nv := range nvs[0:int(math.Min(float64(len(nvs)), float64(topK)))] {
 			fmt.Printf("%8.1d %8.1d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
 		}
+		fmt.Printf("\nRequest size stats:\n")
+		fmt.Println("Total bytes transmitted:", cls["ContentLength_agg_sum"])
+		fmt.Println("Total requests sniffed: ", cls["ContentLength_agg_count"])
+		fmt.Println("Content Length Min:     ", cls["ContentLength_min"])
+		fmt.Println("Content Length 50th:    ", cls["ContentLength_50"])
+		fmt.Println("Content Length 75th:    ", cls["ContentLength_75"])
+		fmt.Println("Content Length 90th:    ", cls["ContentLength_90"])
+		fmt.Println("Content Length 95th:    ", cls["ContentLength_95"])
+		fmt.Println("Content Length 99th:    ", cls["ContentLength_99"])
+		fmt.Println("Content Length 99.9th:  ", cls["ContentLength_99.9"])
+		fmt.Println("Content Length 99.99th: ", cls["ContentLength_99.99"])
+		fmt.Println("Content Length Max:     ", cls["ContentLength_max"])
 	}
 }
 
@@ -67,32 +88,20 @@ func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
 
 func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 	for pkt := range packetsIn {
-		data := string(pkt.Payload)
-		if len(data) == 0 {
+		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(pkt.Payload)))
+		if err != nil {
 			continue
 		}
-
-		lines := strings.Split(data, "\r\n")
-		if len(lines) == 0 {
-			continue
-		}
-
-		verbReq := strings.Split(lines[0], " ")
-		if len(verbReq) < 2 {
-			continue
-		}
-		verb := verbReq[0]
-		path := verbReq[1]
-		ms.Counter(verb+" "+path, 1)
+		ms.Histogram("ContentLength", float64(req.ContentLength))
+		ms.Counter(req.Method+" "+req.URL.Path, 1)
 	}
-
 }
 
 func streamRouter(ports []uint16, parsedPackets chan *pcap.Packet, processors []chan *pcap.Packet) {
 	for pkt := range parsedPackets {
 		interesting := false
 		for _, p := range ports {
-			if pkt.TCP != nil && pkt.TCP.DestPort == p {
+			if pkt.TCP != nil && (pkt.TCP.SrcPort == p || pkt.TCP.DestPort == p) {
 				interesting = true
 				break
 			}
@@ -100,7 +109,9 @@ func streamRouter(ports []uint16, parsedPackets chan *pcap.Packet, processors []
 		if interesting {
 			// SrcPort can be assumed to have sufficient entropy for
 			// distribution among processors, and we want the same
-			// tcp stream to go to the same processor every time.
+			// tcp stream to go to the same processor every time
+			// so that if we do proper packet reconstruction it will
+			// be easier.
 			processors[int(pkt.TCP.SrcPort)%len(processors)] <- pkt
 		}
 	}

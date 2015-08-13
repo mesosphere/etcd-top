@@ -13,56 +13,58 @@ usage:
 result:
 ```
 $ go run etcd-top.go --period=1
-1439502732
-Sum Rate Verb Path
-1383 129 GET /v2/members
-504 47 GET /v2/keys/dog?quorum=false&recursive=false&sorted=false
-437 42 PUT /v2/keys/dog
-11 0 PUT /v2/keys/12
-11 2 PUT /v2/keys/41
-10 1 PUT /v2/keys/56
-9 1 PUT /v2/keys/73
-9 1 PUT /v2/keys/80
-8 1 PUT /v2/keys/70
-8 1 PUT /v2/keys/7
+1439509750
+Top 10 most popular http requests:
+     Sum     Rate Verb Path
+   64247     2662 PUT /v2/keys/foo
+      24        1 GET /v2/members
+       2        0 PUT /v2/keys/75
+       2        0 PUT /v2/keys/19
+       1        0 PUT /v2/keys/58
+       1        0 PUT /v2/keys/48
+       1        0 PUT /v2/keys/2
+       1        0 PUT /v2/keys/13
+       1        0 PUT /v2/keys/34
+       1        0 PUT /v2/keys/70
 
-1439502733
-Sum Rate Verb Path
-1513 130 GET /v2/members
-550 46 GET /v2/keys/dog?quorum=false&recursive=false&sorted=false
-479 42 PUT /v2/keys/dog
-14 3 PUT /v2/keys/41
-11 0 PUT /v2/keys/12
-10 1 PUT /v2/keys/73
-10 2 PUT /v2/keys/2
-10 0 PUT /v2/keys/56
-9 0 PUT /v2/keys/80
-9 1 PUT /v2/keys/75
+Request size stats:
+Total bytes transmitted: 4220520
+Total requests sniffed:  64295
+Content Length Min:      0
+Content Length 50th:     65
+Content Length 75th:     65
+Content Length 90th:     65
+Content Length 95th:     65
+Content Length 99th:     65
+Content Length 99.9th:   65
+Content Length 99.99th:  65
+Content Length Max:      65
 
-1439502734
-Sum Rate Verb Path
-1641 128 GET /v2/members
-597 47 GET /v2/keys/dog?quorum=false&recursive=false&sorted=false
-521 42 PUT /v2/keys/dog
-15 1 PUT /v2/keys/41
-11 0 PUT /v2/keys/12
-11 1 PUT /v2/keys/2
-10 1 PUT /v2/keys/80
-10 0 PUT /v2/keys/56
-10 1 PUT /v2/keys/89
-10 3 PUT /v2/keys/60
+1439509751
+Top 10 most popular http requests:
+     Sum     Rate Verb Path
+   66705     2458 PUT /v2/keys/foo
+      25        1 GET /v2/members
+       2        0 PUT /v2/keys/19
+       2        0 PUT /v2/keys/75
+       1        0 PUT /v2/keys/96
+       1        1 PUT /v2/keys/20
+       1        0 PUT /v2/keys/64
+       1        0 PUT /v2/keys/15
+       1        0 PUT /v2/keys/50
+       1        0 PUT /v2/keys/14
 
-1439502735
-Sum Rate Verb Path
-1769 128 GET /v2/members
-644 47 GET /v2/keys/dog?quorum=false&recursive=false&sorted=false
-562 41 PUT /v2/keys/dog
-15 0 PUT /v2/keys/41
-11 1 PUT /v2/keys/60
-11 0 PUT /v2/keys/12
-11 0 PUT /v2/keys/2
-11 1 PUT /v2/keys/56
-11 1 PUT /v2/keys/80
-10 1 PUT /v2/keys/70
+Request size stats:
+Total bytes transmitted: 4381992
+Total requests sniffed:  66755
+Content Length Min:      0
+Content Length 50th:     65
+Content Length 75th:     65
+Content Length 90th:     65
+Content Length 95th:     65
+Content Length 99th:     65
+Content Length 99.9th:   65
+Content Length 99.99th:  65
+Content Length Max:      65
+...
 ```
-

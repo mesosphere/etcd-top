@@ -37,7 +37,7 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 	for m := range metricStream {
 		nvs := nameSums{}
 		fmt.Printf("\n%d\n", time.Now().Unix())
-		fmt.Println("Sum Rate Verb Path")
+		fmt.Println("     Sum     Rate Verb Path")
 		for k, v := range m.Metrics {
 			if strings.HasSuffix(k, "_rate") {
 				continue
@@ -53,7 +53,7 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 		}
 		sort.Sort(nvs)
 		for _, nv := range nvs[0:int(math.Min(float64(len(nvs)), float64(topK)))] {
-			fmt.Printf("%d %d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
+			fmt.Printf("%8.1d %8.1d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
 		}
 	}
 }
@@ -67,7 +67,6 @@ func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
 
 func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 	for pkt := range packetsIn {
-
 		data := string(pkt.Payload)
 		if len(data) == 0 {
 			continue
@@ -95,6 +94,7 @@ func streamRouter(ports []uint16, parsedPackets chan *pcap.Packet, processors []
 		for _, p := range ports {
 			if pkt.TCP != nil && pkt.TCP.DestPort == p {
 				interesting = true
+				break
 			}
 		}
 		if interesting {
@@ -134,7 +134,7 @@ func main() {
 		}
 	}
 
-	h, err := pcap.Openlive(*iface, 1518000, *promisc, 100000)
+	h, err := pcap.Openlive(*iface, 1518, *promisc, 1000)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

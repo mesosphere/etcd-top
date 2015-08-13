@@ -15,34 +15,37 @@ import (
 	"github.com/spacejam/loghisto"
 )
 
-type nameVal struct {
+type nameSum struct {
 	Name string
-	Val  float64
+	Sum  float64
+	Rate float64
 }
 
-type nameVals []nameVal
+type nameSums []nameSum
 
-func (n nameVals) Len() int {
+func (n nameSums) Len() int {
 	return len(n)
 }
-func (n nameVals) Less(i, j int) bool {
-	return n[i].Val > n[j].Val
+func (n nameSums) Less(i, j int) bool {
+	return n[i].Sum > n[j].Sum
 }
-func (n nameVals) Swap(i, j int) {
+func (n nameSums) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]
 }
 
 func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 	for m := range metricStream {
-		nvs := nameVals{}
+		nvs := nameSums{}
 		fmt.Printf("\n%d\n", time.Now().Unix())
+		fmt.Println("Sum Rate Verb Path")
 		for k, v := range m.Metrics {
 			if strings.HasSuffix(k, "_rate") {
 				continue
 			}
-			nvs = append(nvs, nameVal{
+			nvs = append(nvs, nameSum{
 				Name: k,
-				Val:  v,
+				Sum:  v,
+				Rate: m.Metrics[k+"_rate"],
 			})
 		}
 		if len(nvs) == 0 {
@@ -50,7 +53,55 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 		}
 		sort.Sort(nvs)
 		for _, nv := range nvs[0:int(math.Min(float64(len(nvs)), float64(topK)))] {
-			fmt.Printf("%s: %f\n", nv.Name, nv.Val)
+			fmt.Printf("%d %d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
+		}
+	}
+}
+
+func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
+	for pkt := range packetsIn {
+		pkt.Decode()
+		packetsOut <- pkt
+	}
+}
+
+func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
+	for pkt := range packetsIn {
+
+		data := string(pkt.Payload)
+		if len(data) == 0 {
+			continue
+		}
+
+		lines := strings.Split(data, "\r\n")
+		if len(lines) == 0 {
+			continue
+		}
+
+		verbReq := strings.Split(lines[0], " ")
+		if len(verbReq) < 2 {
+			continue
+		}
+		verb := verbReq[0]
+		path := verbReq[1]
+		ms.Counter(verb+" "+path, 1)
+	}
+
+}
+
+func streamRouter(ports []uint16, parsedPackets chan *pcap.Packet, processors []chan *pcap.Packet) {
+	for pkt := range parsedPackets {
+		interesting := false
+		for _, p := range ports {
+			if pkt.TCP != nil && pkt.TCP.DestPort == p {
+				interesting = true
+			}
+		}
+		if interesting {
+			// SrcPort can be assumed to have sufficient entropy for
+			// distribution among processors, and we want the same
+			// tcp stream to go to the same processor every time.
+			processors[int(pkt.TCP.SrcPort)%len(processors)] <- pkt
 		}
 	}
 }
@@ -90,36 +141,24 @@ func main() {
 	}
 	defer h.Close()
 
+	unparsedPackets := make(chan *pcap.Packet)
+	parsedPackets := make(chan *pcap.Packet)
+	for i := 0; i < 5; i++ {
+		go packetDecoder(unparsedPackets, parsedPackets)
+	}
+
+	processors := []chan *pcap.Packet{}
+	for i := 0; i < 5; i++ {
+		p := make(chan *pcap.Packet)
+		processors = append(processors, p)
+		go processor(ms, p)
+	}
+
+	go streamRouter(ports, parsedPackets, processors)
+
 	for {
 		for pkt := h.Next(); pkt != nil; pkt = h.Next() {
-			pkt.Decode()
-			interesting := false
-			for _, p := range ports {
-				if pkt.TCP != nil && pkt.TCP.DestPort == p {
-					interesting = true
-				}
-			}
-			if !interesting {
-				continue
-			}
-
-			data := string(pkt.Payload)
-			if len(data) == 0 {
-				continue
-			}
-
-			lines := strings.Split(data, "\r\n")
-			if len(lines) == 0 {
-				continue
-			}
-
-			verbReq := strings.Split(lines[0], " ")
-			if len(verbReq) < 2 {
-				continue
-			}
-			verb := verbReq[0]
-			path := verbReq[1]
-			ms.Counter(verb+" "+path, 1)
+			unparsedPackets <- pkt
 		}
 	}
 }

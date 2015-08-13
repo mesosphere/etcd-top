@@ -37,6 +37,9 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 		nvs := nameVals{}
 		fmt.Printf("\n%d\n", time.Now().Unix())
 		for k, v := range m.Metrics {
+			if strings.HasSuffix(k, "_rate") {
+				continue
+			}
 			nvs = append(nvs, nameVal{
 				Name: k,
 				Val:  v,

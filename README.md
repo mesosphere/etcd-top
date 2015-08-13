@@ -14,35 +14,33 @@ result:
 ```
 $ go run etcd-top.go --period=1
 
-1439427855
-GET /v2/members: 1141.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 869.000000
-PUT /v2/keys/dog: 273.000000
-GET /v2/members_rate: 120.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false_rate: 65.000000
-PUT /v2/keys/dog_rate: 55.000000
+1439427981
+GET /v2/members: 121.000000
+GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 65.000000
+PUT /v2/keys/dog: 56.000000
 
-1439427856
-GET /v2/members: 1233.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 918.000000
-PUT /v2/keys/dog: 315.000000
-GET /v2/members_rate: 92.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false_rate: 49.000000
-PUT /v2/keys/dog_rate: 42.000000
+1439427982
+GET /v2/members: 211.000000
+GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 112.000000
+PUT /v2/keys/dog: 99.000000
 
-1439427857
-GET /v2/members: 1323.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 967.000000
-PUT /v2/keys/dog: 357.000000
-GET /v2/members_rate: 90.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false_rate: 49.000000
-PUT /v2/keys/dog_rate: 42.000000
+1439427983
+GET /v2/members: 302.000000
+GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 160.000000
+PUT /v2/keys/dog: 142.000000
 
-1439427858
-GET /v2/members: 1414.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 1016.000000
-PUT /v2/keys/dog: 398.000000
-GET /v2/members_rate: 91.000000
-GET /v2/keys/dog?quorum=false&recursive=false&sorted=false_rate: 49.000000
-PUT /v2/keys/dog_rate: 41.000000
+1439427984
+GET /v2/members: 393.000000
+GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 209.000000
+PUT /v2/keys/dog: 184.000000
+
+1439427985
+GET /v2/members: 484.000000
+GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 257.000000
+PUT /v2/keys/dog: 226.000000
+
+1439427986
+GET /v2/members: 574.000000
+GET /v2/keys/dog?quorum=false&recursive=false&sorted=false: 305.000000
+PUT /v2/keys/dog: 269.000000
 ```

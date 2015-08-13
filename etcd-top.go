@@ -65,7 +65,6 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 			fmt.Printf("%8.1d %8.1d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
 		}
 		fmt.Printf("\nRequest size stats:\n")
-		fmt.Println("Total bytes transmitted:", cls["ContentLength_agg_sum"])
 		fmt.Println("Total requests sniffed: ", cls["ContentLength_agg_count"])
 		fmt.Println("Content Length Min:     ", cls["ContentLength_min"])
 		fmt.Println("Content Length 50th:    ", cls["ContentLength_50"])
@@ -99,20 +98,27 @@ func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 
 func streamRouter(ports []uint16, parsedPackets chan *pcap.Packet, processors []chan *pcap.Packet) {
 	for pkt := range parsedPackets {
-		interesting := false
+		clientPort := uint16(0)
 		for _, p := range ports {
-			if pkt.TCP != nil && (pkt.TCP.SrcPort == p || pkt.TCP.DestPort == p) {
-				interesting = true
+			if pkt.TCP == nil {
+				break
+			}
+			if pkt.TCP.SrcPort == p {
+				clientPort = pkt.TCP.DestPort
+				break
+			}
+			if pkt.TCP.DestPort == p {
+				clientPort = pkt.TCP.SrcPort
 				break
 			}
 		}
-		if interesting {
-			// SrcPort can be assumed to have sufficient entropy for
+		if clientPort != 0 {
+			// client Port can be assumed to have sufficient entropy for
 			// distribution among processors, and we want the same
 			// tcp stream to go to the same processor every time
 			// so that if we do proper packet reconstruction it will
 			// be easier.
-			processors[int(pkt.TCP.SrcPort)%len(processors)] <- pkt
+			processors[int(clientPort)%len(processors)] <- pkt
 		}
 	}
 }

@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"math"
+	"os"
 	"runtime"
 	"sort"
 	"strconv"
@@ -82,7 +82,8 @@ func main() {
 
 	h, err := pcap.Openlive(*iface, 1518000, *promisc, 100000)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	defer h.Close()
 

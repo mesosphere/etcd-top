@@ -26,7 +26,7 @@ func (n nameVals) Len() int {
 	return len(n)
 }
 func (n nameVals) Less(i, j int) bool {
-	return n[i].Val < n[j].Val
+	return n[i].Val > n[j].Val
 }
 func (n nameVals) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]

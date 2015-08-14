@@ -1,5 +1,5 @@
 # etcd-top
-etcd realtime workload analyzer
+Etcd realtime workload analyzer.  Useful for rapid diagnosis of production usage issues and analysis of production request distributions.
 
 usage:
 ```
@@ -12,59 +12,78 @@ usage:
 
 result:
 ```
-$ go run etcd-top.go --period=1
-1439509750
-Top 10 most popular http requests:
+$ go run etcd-top.go --period=1 -iface=eth0 -topk=3
+1439515150
+Top 3 most popular http requests:
      Sum     Rate Verb Path
-   64247     2662 PUT /v2/keys/foo
-      24        1 GET /v2/members
-       2        0 PUT /v2/keys/75
-       2        0 PUT /v2/keys/19
-       1        0 PUT /v2/keys/58
-       1        0 PUT /v2/keys/48
-       1        0 PUT /v2/keys/2
-       1        0 PUT /v2/keys/13
-       1        0 PUT /v2/keys/34
-       1        0 PUT /v2/keys/70
+    6067      251 PUT /v2/keys/foo
+     406       14 GET /v2/members
+       8        2 PUT /v2/keys/5
 
-Request size stats:
-Total bytes transmitted: 4220520
-Total requests sniffed:  64295
+Top 3 slowest individual http requests:
+     Time Request
+54.29811ms PUT /v2/keys/31
+49.624736ms PUT /v2/keys/75
+49.130961ms PUT /v2/keys/foo
+
+Top 3 total time spent in requests:
+     Time Request
+6.262377577s PUT /v2/keys/foo
+279.094478ms GET /v2/members
+67.231305ms PUT /v2/keys/5
+
+Top 3 heaviest http requests:
+Content-Length Request
+   59873 PUT /v2/keys/foo
+      15 PUT /v2/keys/3
+      15 PUT /v2/keys/2
+
+Overall request size stats:
+Total requests sniffed:  13770
 Content Length Min:      0
-Content Length 50th:     65
-Content Length 75th:     65
-Content Length 90th:     65
-Content Length 95th:     65
-Content Length 99th:     65
-Content Length 99.9th:   65
-Content Length 99.99th:  65
-Content Length Max:      65
+Content Length 50th:     180
+Content Length 75th:     59873
+Content Length 90th:     59873
+Content Length 95th:     59873
+Content Length 99th:     59873
+Content Length 99.9th:   59873
+Content Length 99.99th:  59873
+Content Length Max:      59873
 
-1439509751
-Top 10 most popular http requests:
+1439515151
+Top 3 most popular http requests:
      Sum     Rate Verb Path
-   66705     2458 PUT /v2/keys/foo
-      25        1 GET /v2/members
-       2        0 PUT /v2/keys/19
-       2        0 PUT /v2/keys/75
-       1        0 PUT /v2/keys/96
-       1        1 PUT /v2/keys/20
-       1        0 PUT /v2/keys/64
-       1        0 PUT /v2/keys/15
-       1        0 PUT /v2/keys/50
-       1        0 PUT /v2/keys/14
+    6310      243 PUT /v2/keys/foo
+     422       16 GET /v2/members
+       8        0 PUT /v2/keys/21
 
-Request size stats:
-Total bytes transmitted: 4381992
-Total requests sniffed:  66755
+Top 3 slowest individual http requests:
+     Time Request
+60.008692ms PUT /v2/keys/foo
+31.642128ms PUT /v2/keys/58
+31.327283ms PUT /v2/keys/2
+
+Top 3 total time spent in requests:
+     Time Request
+5.766000298s PUT /v2/keys/foo
+207.272109ms GET /v2/members
+31.642128ms PUT /v2/keys/58
+
+Top 3 heaviest http requests:
+Content-Length Request
+   59873 PUT /v2/keys/foo
+      15 PUT /v2/keys/13
+      15 PUT /v2/keys/30
+
+Overall request size stats:
+Total requests sniffed:  14320
 Content Length Min:      0
-Content Length 50th:     65
-Content Length 75th:     65
-Content Length 90th:     65
-Content Length 95th:     65
-Content Length 99th:     65
-Content Length 99.9th:   65
-Content Length 99.99th:  65
-Content Length Max:      65
-...
+Content Length 50th:     15
+Content Length 75th:     59873
+Content Length 90th:     59873
+Content Length 95th:     59873
+Content Length 99th:     59873
+Content Length 99.9th:   59873
+Content Length 99.99th:  59873
+Content Length Max:      59873
 ```

@@ -40,9 +40,36 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 	for m := range metricStream {
 		cls := map[string]uint64{}
 		nvs := nameSums{}
+		reqTimes := nameSums{}
+		reqSumTimes := nameSums{}
+		reqSizes := nameSums{}
 		fmt.Printf("\n%d\n", time.Now().Unix())
 		for k, v := range m.Metrics {
 			if strings.HasSuffix(k, "_rate") {
+				continue
+			}
+			if strings.HasPrefix(k, "timer ") {
+				if strings.HasSuffix(k, "_max") {
+					reqTimes = append(reqTimes, nameSum{
+						Name: strings.TrimSuffix(strings.TrimPrefix(k, "timer "), "_max"),
+						Sum:  v,
+					})
+				}
+				if strings.HasSuffix(k, "_sum") && !strings.HasSuffix(k, "_agg_sum") {
+					reqSumTimes = append(reqSumTimes, nameSum{
+						Name: strings.TrimSuffix(strings.TrimPrefix(k, "timer "), "_sum"),
+						Sum:  v,
+					})
+				}
+				continue
+			}
+			if strings.HasPrefix(k, "size ") {
+				if strings.HasSuffix(k, "_max") {
+					reqSizes = append(reqSizes, nameSum{
+						Name: strings.TrimSuffix(strings.TrimPrefix(k, "size "), "_max"),
+						Sum:  v,
+					})
+				}
 				continue
 			}
 			if strings.HasPrefix(k, "ContentLength") {
@@ -64,7 +91,27 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 		for _, nv := range nvs[0:int(math.Min(float64(len(nvs)), float64(topK)))] {
 			fmt.Printf("%8.1d %8.1d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
 		}
-		fmt.Printf("\nRequest size stats:\n")
+		sort.Sort(reqTimes)
+		fmt.Printf("\nTop %d slowest individual http requests:\n", topK)
+		fmt.Println("     Time Request")
+		for _, nv := range reqTimes[0:int(math.Min(float64(len(reqTimes)), float64(topK)))] {
+			fmt.Printf("%10s %s\n", time.Duration(nv.Sum).String(), nv.Name)
+		}
+
+		sort.Sort(reqSumTimes)
+		fmt.Printf("\nTop %d total time spent in requests:\n", topK)
+		fmt.Println("     Time Request")
+		for _, nv := range reqSumTimes[0:int(math.Min(float64(len(reqSumTimes)), float64(topK)))] {
+			fmt.Printf("%10s %s\n", time.Duration(nv.Sum).String(), nv.Name)
+		}
+
+		sort.Sort(reqSizes)
+		fmt.Printf("\nTop %d heaviest http requests:\n", topK)
+		fmt.Println("Content-Length Request")
+		for _, nv := range reqSizes[0:int(math.Min(float64(len(reqSizes)), float64(topK)))] {
+			fmt.Printf("%8.1d %s\n", int(nv.Sum), nv.Name)
+		}
+		fmt.Printf("\nOverall request size stats:\n")
 		fmt.Println("Total requests sniffed: ", cls["ContentLength_agg_count"])
 		fmt.Println("Content Length Min:     ", cls["ContentLength_min"])
 		fmt.Println("Content Length 50th:    ", cls["ContentLength_50"])
@@ -75,6 +122,7 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 		fmt.Println("Content Length 99.9th:  ", cls["ContentLength_99.9"])
 		fmt.Println("Content Length 99.99th: ", cls["ContentLength_99.99"])
 		fmt.Println("Content Length Max:     ", cls["ContentLength_max"])
+
 	}
 }
 
@@ -86,17 +134,47 @@ func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
 }
 
 func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
+	reqTimers := map[uint32]loghisto.TimerToken{}
+	processRequest := func(req *http.Request) {
+
+	}
+
+	processResponse := func(res *http.Response) {
+
+	}
+
 	for pkt := range packetsIn {
-		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(pkt.Payload)))
-		if err != nil {
-			continue
+		var token uint32
+		req, reqErr := http.ReadRequest(bufio.NewReader(bytes.NewReader(pkt.Payload)))
+		if reqErr == nil {
+			processRequest(req)
+			token = (uint32(pkt.TCP.SrcPort) << 8) + uint32(pkt.TCP.DestPort)
+			reqTimers[token] = ms.StartTimer("timer " + req.Method + " " + req.URL.Path)
+			ms.Histogram("size "+req.Method+" "+req.URL.Path, float64(req.ContentLength))
+			ms.Histogram("ContentLength", float64(req.ContentLength))
+			ms.Counter(req.Method+" "+req.URL.Path, 1)
+		} else {
+			res, resErr := http.ReadResponse(bufio.NewReader(bytes.NewReader(pkt.Payload)), nil)
+			if resErr != nil {
+				// not a valid request or response
+				continue
+			}
+			processResponse(res)
+			ms.Histogram("ContentLength", float64(res.ContentLength))
+			token = (uint32(pkt.TCP.DestPort) << 8) + uint32(pkt.TCP.SrcPort)
+			timer, present := reqTimers[token]
+			if present {
+				timer.Stop()
+			}
 		}
-		ms.Histogram("ContentLength", float64(req.ContentLength))
-		ms.Counter(req.Method+" "+req.URL.Path, 1)
 	}
 }
 
-func streamRouter(ports []uint16, parsedPackets chan *pcap.Packet, processors []chan *pcap.Packet) {
+func streamRouter(
+	ports []uint16,
+	parsedPackets chan *pcap.Packet,
+	processors []chan *pcap.Packet,
+) {
 	for pkt := range parsedPackets {
 		clientPort := uint16(0)
 		for _, p := range ports {
@@ -126,7 +204,7 @@ func streamRouter(ports []uint16, parsedPackets chan *pcap.Packet, processors []
 func main() {
 	portsArg := flag.String("ports", "4001,2379", "etcd listening ports")
 	iface := flag.String("iface", "lo", "interface for sniffing traffic on")
-	promisc := flag.Bool("promiscuous", false, "whether to perform promiscuous sniffing or not.")
+	promisc := flag.Bool("promiscuous", false, "promiscuous mode")
 	period := flag.Uint("period", 60, "seconds between submissions")
 	topK := flag.Uint("topk", 10, "submit stats for the top <K> sniffed paths")
 
@@ -174,7 +252,8 @@ func main() {
 	go streamRouter(ports, parsedPackets, processors)
 
 	for {
-		for pkt := h.Next(); pkt != nil; pkt = h.Next() {
+		pkt := h.Next()
+		if pkt != nil {
 			unparsedPackets <- pkt
 		}
 	}

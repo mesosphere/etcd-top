@@ -50,15 +50,15 @@ Min:      0
 Max:      410
 
 GET distribution in microseconds:
-Min:      3506
-50th:     3506
-75th:     3506
-90th:     3506
-95th:     3506
-99th:     3506
-99.9th:   3506
-99.99th:  3506
-Max:      3506
+Min:      11
+50th:     8537
+75th:     22075
+90th:     26695
+95th:     29209
+99th:     34277
+99.9th:   40629
+99.99th:  52169
+Max:      53222
 
 PUT distribution in microseconds:
 Min:      13

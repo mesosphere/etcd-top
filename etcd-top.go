@@ -36,14 +36,14 @@ func (n nameSums) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]
 }
 
-func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
+func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period uint) {
 	for m := range metricStream {
-		cls := map[string]uint64{}
+		metrics := map[string]uint64{}
 		nvs := nameSums{}
 		reqTimes := nameSums{}
 		reqSumTimes := nameSums{}
 		reqSizes := nameSums{}
-		fmt.Printf("\n%d\n", time.Now().Unix())
+		verbs := map[string]struct{}{}
 		for k, v := range m.Metrics {
 			if strings.HasSuffix(k, "_rate") {
 				continue
@@ -73,15 +73,24 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 				continue
 			}
 			if strings.HasPrefix(k, "ContentLength") {
-				cls[k] = uint64(v)
+				metrics[k] = uint64(v)
 				continue
 			}
+			if strings.HasPrefix(k, "verbtimer ") {
+				verbs[strings.Split(strings.TrimPrefix(k, "verbtimer "), "_")[0]] = struct{}{}
+				// convert to milliseconds
+				m.Metrics[k] = v / 1e3
+				continue
+			}
+
 			nvs = append(nvs, nameSum{
 				Name: k,
 				Sum:  v,
 				Rate: m.Metrics[k+"_rate"],
 			})
 		}
+
+		fmt.Printf("\n%d sniffed %d requests in %d seconds\n", time.Now().Unix(), metrics["ContentLength_count"], period)
 		if len(nvs) == 0 {
 			continue
 		}
@@ -111,19 +120,27 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK uint) {
 		for _, nv := range reqSizes[0:int(math.Min(float64(len(reqSizes)), float64(topK)))] {
 			fmt.Printf("%8.1d %s\n", int(nv.Sum), nv.Name)
 		}
-		fmt.Printf("\nOverall request size stats:\n")
-		fmt.Println("Total requests sniffed: ", cls["ContentLength_agg_count"])
-		fmt.Println("Content Length Min:     ", cls["ContentLength_min"])
-		fmt.Println("Content Length 50th:    ", cls["ContentLength_50"])
-		fmt.Println("Content Length 75th:    ", cls["ContentLength_75"])
-		fmt.Println("Content Length 90th:    ", cls["ContentLength_90"])
-		fmt.Println("Content Length 95th:    ", cls["ContentLength_95"])
-		fmt.Println("Content Length 99th:    ", cls["ContentLength_99"])
-		fmt.Println("Content Length 99.9th:  ", cls["ContentLength_99.9"])
-		fmt.Println("Content Length 99.99th: ", cls["ContentLength_99.99"])
-		fmt.Println("Content Length Max:     ", cls["ContentLength_max"])
 
+		fmt.Printf("\nContent-Length distribution in bytes:\n")
+		printDistribution("ContentLength", m.Metrics)
+
+		for verb, _ := range verbs {
+			fmt.Printf("\n%s distribution in microseconds:\n", verb)
+			printDistribution("verbtimer "+verb, m.Metrics)
+		}
 	}
+}
+
+func printDistribution(key string, metrics map[string]float64) {
+	fmt.Println("Min:     ", int(metrics[key+"_min"]))
+	fmt.Println("50th:    ", int(metrics[key+"_50"]))
+	fmt.Println("75th:    ", int(metrics[key+"_75"]))
+	fmt.Println("90th:    ", int(metrics[key+"_90"]))
+	fmt.Println("95th:    ", int(metrics[key+"_95"]))
+	fmt.Println("99th:    ", int(metrics[key+"_99"]))
+	fmt.Println("99.9th:  ", int(metrics[key+"_99.9"]))
+	fmt.Println("99.99th: ", int(metrics[key+"_99.99"]))
+	fmt.Println("Max:     ", int(metrics[key+"_max"]))
 }
 
 func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
@@ -135,21 +152,15 @@ func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
 
 func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 	reqTimers := map[uint32]loghisto.TimerToken{}
-	processRequest := func(req *http.Request) {
-
-	}
-
-	processResponse := func(res *http.Response) {
-
-	}
+	reqVerbTimers := map[uint32]loghisto.TimerToken{}
 
 	for pkt := range packetsIn {
 		var token uint32
 		req, reqErr := http.ReadRequest(bufio.NewReader(bytes.NewReader(pkt.Payload)))
 		if reqErr == nil {
-			processRequest(req)
 			token = (uint32(pkt.TCP.SrcPort) << 8) + uint32(pkt.TCP.DestPort)
 			reqTimers[token] = ms.StartTimer("timer " + req.Method + " " + req.URL.Path)
+			reqVerbTimers[token] = ms.StartTimer("verbtimer " + req.Method)
 			ms.Histogram("size "+req.Method+" "+req.URL.Path, float64(req.ContentLength))
 			ms.Histogram("ContentLength", float64(req.ContentLength))
 			ms.Counter(req.Method+" "+req.URL.Path, 1)
@@ -159,12 +170,15 @@ func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 				// not a valid request or response
 				continue
 			}
-			processResponse(res)
 			ms.Histogram("ContentLength", float64(res.ContentLength))
 			token = (uint32(pkt.TCP.DestPort) << 8) + uint32(pkt.TCP.SrcPort)
-			timer, present := reqTimers[token]
+			reqTimer, present := reqTimers[token]
 			if present {
-				timer.Stop()
+				reqTimer.Stop()
+			}
+			verbTimer, present := reqVerbTimers[token]
+			if present {
+				verbTimer.Stop()
 			}
 		}
 	}
@@ -219,7 +233,7 @@ func main() {
 	ms.SubscribeToProcessedMetrics(metricStream)
 	defer ms.UnsubscribeFromProcessedMetrics(metricStream)
 
-	go statPrinter(metricStream, *topK)
+	go statPrinter(metricStream, *topK, *period)
 
 	ports := []uint16{}
 	for _, p := range strings.Split(*portsArg, ",") {

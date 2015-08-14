@@ -203,7 +203,7 @@ func streamRouter(
 
 func main() {
 	portsArg := flag.String("ports", "4001,2379", "etcd listening ports")
-	iface := flag.String("iface", "lo", "interface for sniffing traffic on")
+	iface := flag.String("iface", "eth0", "interface for sniffing traffic on")
 	promisc := flag.Bool("promiscuous", false, "promiscuous mode")
 	period := flag.Uint("period", 60, "seconds between submissions")
 	topK := flag.Uint("topk", 10, "submit stats for the top <K> sniffed paths")

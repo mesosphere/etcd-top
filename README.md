@@ -49,41 +49,4 @@ Content Length 99th:     59873
 Content Length 99.9th:   59873
 Content Length 99.99th:  59873
 Content Length Max:      59873
-
-1439515151
-Top 3 most popular http requests:
-     Sum     Rate Verb Path
-    6310      243 PUT /v2/keys/foo
-     422       16 GET /v2/members
-       8        0 PUT /v2/keys/21
-
-Top 3 slowest individual http requests:
-     Time Request
-60.008692ms PUT /v2/keys/foo
-31.642128ms PUT /v2/keys/58
-31.327283ms PUT /v2/keys/2
-
-Top 3 total time spent in requests:
-     Time Request
-5.766000298s PUT /v2/keys/foo
-207.272109ms GET /v2/members
-31.642128ms PUT /v2/keys/58
-
-Top 3 heaviest http requests:
-Content-Length Request
-   59873 PUT /v2/keys/foo
-      15 PUT /v2/keys/13
-      15 PUT /v2/keys/30
-
-Overall request size stats:
-Total requests sniffed:  14320
-Content Length Min:      0
-Content Length 50th:     15
-Content Length 75th:     59873
-Content Length 90th:     59873
-Content Length 95th:     59873
-Content Length 99th:     59873
-Content Length 99.9th:   59873
-Content Length 99.99th:  59873
-Content Length Max:      59873
 ```

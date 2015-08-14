@@ -3,7 +3,7 @@ Etcd realtime workload analyzer.  Useful for rapid diagnosis of production usage
 
 usage:
 ```
-  -iface="lo": interface for sniffing traffic on
+  -iface="eth0": interface for sniffing traffic on
   -period=60: seconds between submissions
   -ports="4001,2379": etcd listening ports
   -promiscuous=false: whether to perform promiscuous sniffing or not.

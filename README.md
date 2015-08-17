@@ -13,61 +13,40 @@ usage:
 result:
 ```
 $ go run etcd-top.go --period=1 -iface=eth0 -topk=3
-1439589180 sniffed 71133 requests in 15 seconds
+1439855242 sniffed 1719 requests over last 1 seconds
+
 Top 3 most popular http requests:
      Sum     Rate Verb Path
-     732      732 PUT /v2/keys/e
-     726      726 PUT /v2/keys/g
-     725      725 PUT /v2/keys/J
+     300       27 GET /v2/keys/a
+     294       34 GET /v2/keys/A
+     291       27 GET /v2/keys/I
 
 Top 3 slowest individual http requests:
      Time Request
-71.128594ms PUT /v2/keys/M
-70.420853ms PUT /v2/keys/C
-70.420853ms PUT /v2/keys/w
+168.088299ms GET /v2/keys/q
+166.415793ms GET /v2/keys/O
+140.399149ms PUT /v2/keys/C
 
 Top 3 total time spent in requests:
      Time Request
-14.136272732s PUT /v2/keys/e
-14.046793453s PUT /v2/keys/m
-13.980721012s PUT /v2/keys/f
+1.457908592s GET /v2/keys/o
+1.419160568s GET /v2/keys/O
+1.295238146s GET /v2/keys/M
 
 Top 3 heaviest http requests:
 Content-Length Request
-     236 PUT /v2/keys/u
-     203 PUT /v2/keys/t
-     147 PUT /v2/keys/T
+     105 PUT /v2/keys/H
+     105 PUT /v2/keys/T
+     105 PUT /v2/keys/m
 
-Content-Length distribution in bytes:
-Min:      0
-50th:     115
-75th:     178
-90th:     182
-95th:     185
-99th:     195
-99.9th:   236
-99.99th:  303
-Max:      410
-
-GET distribution in microseconds:
-Min:      11
-50th:     8537
-75th:     22075
-90th:     26695
-95th:     29209
-99th:     34277
-99.9th:   40629
-99.99th:  52169
-Max:      53222
-
-PUT distribution in microseconds:
-Min:      13
-50th:     17021
-75th:     29799
-90th:     37132
-95th:     40629
-99th:     52693
-99.9th:   63085
-99.99th:  70420
-Max:      71128
+Content Length and latency (microseconds) per HTTP verb
+       Type     all_sz    all_lat     GET_sz    GET_lat     PUT_sz    PUT_lat  DELETE_sz DELETE_lat    POST_sz   POST_lat
+      Count       1719       1487       1193       1193        294        294          0          0          0          0
+       50th        195   34277508        195   32281341        375   55951733          0          0          0          0
+       75th        195   57082033        195   50123473        375   72565487          0          0          0          0
+       90th        375   77827078        195   73294782        375   98937608          0          0          0          0
+       99th        375  132222939        375  132222939        375  130907299          0          0          0          0
+     99.9th        375  166415793        375  166415793        375  140399149          0          0          0          0
+    99.99th        375  168088299        375  168088299        375  140399149          0          0          0          0
+        Max        375  168088299        375  168088299        375  140399149          0          0          0          0
 ```

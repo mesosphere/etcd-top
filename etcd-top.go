@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	//"io/ioutil"
 	"math"
 	"net/http"
 	"os"
@@ -14,9 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akrennmair/gopcap"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/pcap"
 
-	"github.com/spacejam/loghisto"
+	"../loghisto"
 )
 
 type labelPrefix struct {
@@ -44,7 +46,6 @@ func (n nameSums) Swap(i, j int) {
 
 func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period uint) {
 	for m := range metricStream {
-		metrics := map[string]uint64{}
 		nvs := nameSums{}
 		reqTimes := nameSums{}
 		reqSumTimes := nameSums{}
@@ -77,25 +78,17 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 				}
 				continue
 			}
-			if strings.HasPrefix(k, "globalsize") {
-				metrics[k] = uint64(v)
+			if (strings.HasPrefix(k, "globaltimer") ||
+				strings.HasPrefix(k, "verbtimer")) &&
+				!strings.HasSuffix(k, "_count") {
+				// convert to milliseconds
+				m.Metrics[k] = v / 1e3
 				continue
 			}
 			if strings.HasPrefix(k, "verbsize ") ||
-				strings.HasPrefix(k, "verbtimer") ||
-				strings.HasPrefix(k, "globaltimer") {
-				continue
-			}
-			if strings.HasPrefix(k, "verbtimer ") &&
-				!strings.HasSuffix(k, "_count") {
-				// convert to milliseconds
-				m.Metrics[k] = v / 1e3
-				continue
-			}
-			if strings.HasPrefix(k, "globaltimer") &&
-				!strings.HasSuffix(k, "_count") {
-				// convert to milliseconds
-				m.Metrics[k] = v / 1e3
+				strings.HasPrefix(k, "globalsize") ||
+				strings.HasPrefix(k, "globaltimer") ||
+				strings.HasPrefix(k, "verbtimer") {
 				continue
 			}
 
@@ -107,7 +100,7 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 		}
 
 		fmt.Printf("\n%d sniffed %d requests over last %d seconds\n\n", time.Now().Unix(),
-			metrics["globalsize_count"], period)
+			uint64(m.Metrics["globalsize_count"]), period)
 		if len(nvs) == 0 {
 			continue
 		}
@@ -150,7 +143,7 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 			format += "%10s "
 		}
 		format += "\n"
-		fmt.Printf("\nContent Length and latency (microseconds) per HTTP verb\n")
+		fmt.Printf("\nContent length (bytes) and latency (microseconds) per HTTP verb\n")
 		fmt.Printf("       Type     all_sz    all_lat     GET_sz" +
 			"    GET_lat     PUT_sz    PUT_lat  DELETE_sz DELETE_lat" +
 			"    POST_sz   POST_lat\n")
@@ -181,14 +174,57 @@ func printDistribution(metrics map[string]float64, keys ...labelPrefix) {
 	}
 }
 
-func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
+func packetDecoder(packetsIn chan *gopacket.Packet, packetsOut chan *gopacket.Packet) {
 	for pkt := range packetsIn {
 		pkt.Decode()
 		packetsOut <- pkt
 	}
 }
 
-func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
+type HTTPStreamMachine struct {
+	seq     uint32
+	sofar   *bytes.Buffer
+	pending map[uint32]*gopacket.Packet
+}
+
+func NewHTTPStreamMachine() HTTPStreamMachine {
+	return HTTPStreamMachine{
+		seq:     0,
+		sofar:   bytes.NewBuffer([]byte{}),
+		pending: map[uint32]*gopacket.Packet{},
+	}
+}
+
+func (sm HTTPStreamMachine) Feed(pkt *gopacket.Packet) error {
+	if pkt.TCP != nil {
+		// This is the initial packet
+		if 0 != (pkt.TCP.Flags & pcap.TCP_SYN) {
+			sm.seq = pkt.TCP.Seq
+		}
+		/*
+			fmt.Println(pkt.TCP.FlagsString())
+			fmt.Println(pkt.TCP.SrcPort, pkt.TCP.DestPort, pkt.TCP.Seq, pkt.TCP.Ack)
+			fmt.Println(string(pkt.Payload))
+			fmt.Println()
+			if pkt.TCP.Seq == sm.seq+1 {
+				sm.sofar.Write(pkt.Payload)
+				sm.AssembleOld()
+			}
+		*/
+	}
+	return nil
+}
+
+func (sm HTTPStreamMachine) AssembleOld() {}
+
+func (sm HTTPStreamMachine) Ready() bool { return false }
+
+func (sm HTTPStreamMachine) Get() []byte {
+	return sm.sofar.Bytes()
+}
+
+func processor(ms *loghisto.MetricSystem, packetsIn chan *gopacket.Packet, ports []uint16) {
+	streamMachine := NewHTTPStreamMachine()
 	reqTimers := map[uint32]loghisto.TimerToken{}
 	reqVerbTimers := map[uint32]loghisto.TimerToken{}
 	globalTimers := map[uint32]loghisto.TimerToken{}
@@ -196,28 +232,63 @@ func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 
 	for pkt := range packetsIn {
 		var token uint32
+		for _, p := range ports {
+			if pkt.TCP == nil {
+				break
+			}
+			if pkt.TCP.SrcPort == p {
+				token = (uint32(pkt.TCP.SrcPort) << 8) + uint32(pkt.TCP.DestPort)
+				break
+			}
+			if pkt.TCP.DestPort == p {
+				token = (uint32(pkt.TCP.DestPort) << 8) + uint32(pkt.TCP.SrcPort)
+				break
+			}
+		}
+		//streamToken := (uint32(pkt.TCP.SrcPort) << 8) + uint32(pkt.TCP.DestPort)
+		streamMachine.Feed(pkt)
+		//fmt.Println(string(pkt.Payload))
 		req, reqErr := http.ReadRequest(bufio.NewReader(bytes.NewReader(pkt.Payload)))
 		if reqErr == nil {
-			token = (uint32(pkt.TCP.SrcPort) << 8) + uint32(pkt.TCP.DestPort)
 			reqTimers[token] = ms.StartTimer("timer " + req.Method + " " + req.URL.Path)
 			reqVerbTimers[token] = ms.StartTimer("verbtimer " + req.Method)
 			globalTimers[token] = ms.StartTimer("globaltimer")
 			ms.Histogram("size "+req.Method+" "+req.URL.Path, float64(req.ContentLength))
 			ms.Counter(req.Method+" "+req.URL.Path, 1)
 			reqVerb[token] = req.Method
+			if req.Method == "PUT" || req.Method == "POST" {
+				ms.Histogram("globalsize", float64(req.ContentLength))
+				ms.Histogram("verbsize "+req.Method, float64(req.ContentLength))
+			}
 		} else {
 			res, resErr := http.ReadResponse(bufio.NewReader(bytes.NewReader(pkt.Payload)), nil)
 			if resErr != nil {
 				// not a valid request or response
 				continue
 			}
-			ms.Histogram("globalsize", float64(res.ContentLength))
-			token = (uint32(pkt.TCP.DestPort) << 8) + uint32(pkt.TCP.SrcPort)
 			reqTimer, present := reqTimers[token]
 			if present {
 				reqTimer.Stop()
 				delete(reqTimers, token)
 			}
+
+			verb, present := reqVerb[token]
+			if present {
+				if !(verb == "PUT" || verb == "POST") {
+					/*
+						fmt.Println(verb, res.ContentLength)
+						body, err := ioutil.ReadAll(res.Body)
+						if err == nil {
+							fmt.Println(len(body))
+						}
+						res.Body.Close()
+					*/
+					ms.Histogram("globalsize", float64(res.ContentLength))
+					ms.Histogram("verbsize "+verb, float64(res.ContentLength))
+				}
+				delete(reqVerb, token)
+			}
+
 			verbTimer, present := reqVerbTimers[token]
 			if present {
 				verbTimer.Stop()
@@ -228,19 +299,14 @@ func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 				globalTimer.Stop()
 				delete(globalTimers, token)
 			}
-			verb, present := reqVerb[token]
-			if present {
-				ms.Histogram("verbsize "+verb, float64(res.ContentLength))
-				delete(reqVerb, token)
-			}
 		}
 	}
 }
 
 func streamRouter(
 	ports []uint16,
-	parsedPackets chan *pcap.Packet,
-	processors []chan *pcap.Packet,
+	parsedPackets chan *gopacket.Packet,
+	processors []chan *gopacket.Packet,
 ) {
 	for pkt := range parsedPackets {
 		clientPort := uint16(0)
@@ -269,7 +335,7 @@ func streamRouter(
 }
 
 func main() {
-	portsArg := flag.String("ports", "4001,2379", "etcd listening ports")
+	portsArg := flag.String("ports", "4001,2379,7001", "etcd listening ports")
 	iface := flag.String("iface", "eth0", "interface for sniffing traffic on")
 	promisc := flag.Bool("promiscuous", false, "promiscuous mode")
 	period := flag.Uint("period", 60, "seconds between submissions")
@@ -303,23 +369,23 @@ func main() {
 	}
 	defer h.Close()
 
-	unparsedPackets := make(chan *pcap.Packet)
-	parsedPackets := make(chan *pcap.Packet)
+	unparsedPackets := make(chan *gopacket.Packet)
+	parsedPackets := make(chan *gopacket.Packet)
 	for i := 0; i < 5; i++ {
 		go packetDecoder(unparsedPackets, parsedPackets)
 	}
 
-	processors := []chan *pcap.Packet{}
-	for i := 0; i < 5; i++ {
-		p := make(chan *pcap.Packet)
+	processors := []chan *gopacket.Packet{}
+	for i := 0; i < 1; i++ {
+		p := make(chan *gopacket.Packet)
 		processors = append(processors, p)
-		go processor(ms, p)
+		go processor(ms, p, ports)
 	}
 
 	go streamRouter(ports, parsedPackets, processors)
 
 	for {
-		pkt := h.Next()
+		pkt := h.ReadPacketData()
 		if pkt != nil {
 			unparsedPackets <- pkt
 		}

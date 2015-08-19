@@ -68,6 +68,19 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 		reqSumTimes := nameSums{}
 		reqSizes := nameSums{}
 		for k, v := range m.Metrics {
+			if strings.HasPrefix(k, "verbtimer ") &&
+				!strings.HasSuffix(k, "_count") {
+				// convert to milliseconds
+				m.Metrics[k] = v / 1e3
+				continue
+			}
+			if strings.HasPrefix(k, "globaltimer") &&
+				!strings.HasSuffix(k, "_count") {
+				// convert to milliseconds
+				m.Metrics[k] = v / 1e3
+				continue
+			}
+
 			if strings.HasSuffix(k, "_rate") {
 				continue
 			}
@@ -102,18 +115,6 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 			if strings.HasPrefix(k, "verbsize ") ||
 				strings.HasPrefix(k, "verbtimer") ||
 				strings.HasPrefix(k, "globaltimer") {
-				continue
-			}
-			if strings.HasPrefix(k, "verbtimer ") &&
-				!strings.HasSuffix(k, "_count") {
-				// convert to milliseconds
-				m.Metrics[k] = v / 1e3
-				continue
-			}
-			if strings.HasPrefix(k, "globaltimer") &&
-				!strings.HasSuffix(k, "_count") {
-				// convert to milliseconds
-				m.Metrics[k] = v / 1e3
 				continue
 			}
 

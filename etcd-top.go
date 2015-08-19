@@ -299,80 +299,6 @@ func streamRouter(
 	}
 }
 
-func main() {
-	portsArg := flag.String("ports", "2379,4001", "etcd listening ports")
-	iface := flag.String("iface", "eth0", "interface for sniffing traffic on")
-	promisc := flag.Bool("promiscuous", false, "promiscuous mode")
-	period := flag.Uint("period", 60, "seconds between submissions")
-	topK := flag.Uint("topk", 10, "submit stats for the top <K> sniffed paths")
-
-	flag.Parse()
-
-	numCPU := runtime.NumCPU()
-	runtime.GOMAXPROCS(numCPU)
-
-	ms := loghisto.NewMetricSystem(time.Duration(*period)*time.Second, false)
-	ms.Start()
-	metricStream := make(chan *loghisto.ProcessedMetricSet, 2)
-	ms.SubscribeToProcessedMetrics(metricStream)
-	defer ms.UnsubscribeFromProcessedMetrics(metricStream)
-
-	go statPrinter(metricStream, *topK, *period)
-
-	ports := []uint16{}
-	for _, p := range strings.Split(*portsArg, ",") {
-		p, err := strconv.Atoi(p)
-		if err == nil {
-			ports = append(ports, uint16(p))
-		}
-	}
-
-	parsedPackets := make(chan gopacket.Packet)
-
-	processors := []chan gopacket.Packet{}
-	for i := 0; i < 4; i++ {
-		p := make(chan gopacket.Packet)
-		processors = append(processors, p)
-		go processor(ms, p, ports)
-	}
-
-	go streamRouter(ports, parsedPackets, processors)
-
-	defer util.Run()()
-
-	handle, err := pcap.OpenLive(*iface, 1518, *promisc, 1)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	portArray := strings.Split(*portsArg, ",")
-	dst := strings.Join(portArray, " or dst port ")
-	src := strings.Join(portArray, " or src port ")
-	filter := fmt.Sprintf("tcp and (dst port %s or src port %s)", dst, src)
-	fmt.Println("using bpf filter: ", filter)
-	if err := handle.SetBPFFilter(filter); err != nil {
-		log.Fatal(err)
-	}
-
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	packets := packetSource.Packets()
-	for {
-		select {
-		case packet := <-packets:
-			// A nil packet indicates the end of a pcap file.
-			if packet == nil {
-				return
-			}
-			//log.Println(packet)
-			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
-				log.Println("Unusable packet")
-				continue
-			}
-			parsedPackets <- packet
-		}
-	}
-}
-
 // httpStreamFactory implements tcpassembly.StreamFactory
 type httpStreamFactory struct {
 	processedRequests  chan reqToken
@@ -484,6 +410,79 @@ func (h *httpStream) readRes() {
 			} else {
 				log.Println("nil res Body")
 			}
+		}
+	}
+}
+func main() {
+	portsArg := flag.String("ports", "2379,4001", "etcd listening ports")
+	iface := flag.String("iface", "eth0", "interface for sniffing traffic on")
+	promisc := flag.Bool("promiscuous", false, "promiscuous mode")
+	period := flag.Uint("period", 60, "seconds between submissions")
+	topK := flag.Uint("topk", 10, "submit stats for the top <K> sniffed paths")
+
+	flag.Parse()
+
+	numCPU := runtime.NumCPU()
+	runtime.GOMAXPROCS(numCPU)
+
+	ms := loghisto.NewMetricSystem(time.Duration(*period)*time.Second, false)
+	ms.Start()
+	metricStream := make(chan *loghisto.ProcessedMetricSet, 2)
+	ms.SubscribeToProcessedMetrics(metricStream)
+	defer ms.UnsubscribeFromProcessedMetrics(metricStream)
+
+	go statPrinter(metricStream, *topK, *period)
+
+	ports := []uint16{}
+	for _, p := range strings.Split(*portsArg, ",") {
+		p, err := strconv.Atoi(p)
+		if err == nil {
+			ports = append(ports, uint16(p))
+		}
+	}
+
+	parsedPackets := make(chan gopacket.Packet)
+
+	processors := []chan gopacket.Packet{}
+	for i := 0; i < 10; i++ {
+		p := make(chan gopacket.Packet)
+		processors = append(processors, p)
+		go processor(ms, p, ports)
+	}
+
+	go streamRouter(ports, parsedPackets, processors)
+
+	defer util.Run()()
+
+	handle, err := pcap.OpenLive(*iface, 1518, *promisc, 1)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	portArray := strings.Split(*portsArg, ",")
+	dst := strings.Join(portArray, " or dst port ")
+	src := strings.Join(portArray, " or src port ")
+	filter := fmt.Sprintf("tcp and (dst port %s or src port %s)", dst, src)
+	fmt.Println("using bpf filter: ", filter)
+	if err := handle.SetBPFFilter(filter); err != nil {
+		log.Fatal(err)
+	}
+
+	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+	packets := packetSource.Packets()
+	for {
+		select {
+		case packet := <-packets:
+			// A nil packet indicates the end of a pcap file.
+			if packet == nil {
+				return
+			}
+			//log.Println(packet)
+			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
+				log.Println("Unusable packet")
+				continue
+			}
+			parsedPackets <- packet
 		}
 	}
 }

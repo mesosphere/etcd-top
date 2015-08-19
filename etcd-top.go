@@ -16,8 +16,26 @@ import (
 
 	"github.com/akrennmair/gopcap"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spacejam/loghisto"
 )
+
+var (
+	promGauges = map[string]prometheus.Gauge{}
+)
+
+func init() {
+	verbs := []string{"GET", "PUT", "DELETE", "POST"}
+	promSuffixes := []string{"_50", "_75", "_90", "_99", "_max", "_count"}
+	for _, v := range verbs {
+		for _, s := range promSuffixes {
+			metric := "etcdtop_" + v + s
+			gauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: metric, Help: metric + " latency in microseconds"})
+			prometheus.MustRegister(gauge)
+			promGauges[metric] = gauge
+		}
+	}
+}
 
 type labelPrefix struct {
 	label  string
@@ -176,6 +194,15 @@ func printDistribution(metrics map[string]float64, keys ...labelPrefix) {
 		fmt.Printf("%11s", t.label)
 		for _, k := range keys {
 			fmt.Printf("%11.1d", int(metrics[k.prefix+t.suffix]))
+			splits := strings.Split(k.prefix+t.suffix, " ")
+			if len(splits) != 2 {
+				continue
+			}
+			promSuffix := splits[1]
+			g, present := promGauges["etcdtop_"+promSuffix]
+			if present {
+				g.Set(metrics[k.prefix+t.suffix])
+			}
 		}
 		fmt.Printf("\n")
 	}
@@ -274,8 +301,13 @@ func main() {
 	promisc := flag.Bool("promiscuous", false, "promiscuous mode")
 	period := flag.Uint("period", 60, "seconds between submissions")
 	topK := flag.Uint("topk", 10, "submit stats for the top <K> sniffed paths")
-
+	prometheusPort := flag.Uint("prometheus-port", 0, "port for prometheus exporter to listen on")
 	flag.Parse()
+
+	if *prometheusPort != 0 {
+		http.Handle("/metrics", prometheus.UninstrumentedHandler())
+		go http.ListenAndServe(":"+strconv.Itoa(int(*prometheusPort)), nil)
+	}
 
 	numCPU := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCPU)

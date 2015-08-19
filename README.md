@@ -3,11 +3,13 @@ Etcd realtime workload analyzer.  Useful for rapid diagnosis of production usage
 
 The way it determines request sizes is SUPER naive, and this does not make any accuracy guarantees, but it can get you out of an outage by showing you what your cluster is doing.
 
+Optionally, you can export HTTP latency metrics using prometheus by passing in `-prometheus-port=<port>`.
 usage:
 ```
   -iface="eth0": interface for sniffing traffic on
   -period=60: seconds between submissions
   -ports="4001,2379": etcd listening ports
+  -prometheus-port=0: port for prometheus exporter to listen on
   -promiscuous=false: whether to perform promiscuous sniffing or not.
   -topk=10: submit stats for the top <K> sniffed paths
 ```

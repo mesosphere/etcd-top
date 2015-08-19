@@ -199,10 +199,12 @@ func printDistribution(metrics map[string]float64, keys ...labelPrefix) {
 			if len(splits) != 2 {
 				continue
 			}
-			promSuffix := splits[1]
-			g, present := promGauges["etcdtop_"+promSuffix]
-			if present {
-				g.Set(metrics[k.prefix+t.suffix])
+			if strings.HasPrefix(k.prefix, "verbtimer") {
+				promSuffix := splits[1]
+				g, present := promGauges["etcdtop_"+promSuffix]
+				if present {
+					g.Set(metrics[k.prefix+t.suffix])
+				}
 			}
 		}
 		fmt.Printf("\n")

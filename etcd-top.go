@@ -60,6 +60,9 @@ func (n nameSums) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]
 }
 
+// This disgusting function listens for periodic metrics from
+// the loghisto metric system, and upon receipt of a batch of them
+// it will format and print the output.
 func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period uint) {
 	for m := range metricStream {
 		metrics := map[string]uint64{}
@@ -177,6 +180,11 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 	}
 }
 
+// printDistribution prints counts and percentiles, and submits them to
+// the prometheus exposition code for possible collection.  While much
+// higher percentiles are available in the metric output, anything above
+// the 90th percentile has been measured to have dramatic skew induced
+// by the latency disturbing nature of pcap collection.
 func printDistribution(metrics map[string]float64, keys ...labelPrefix) {
 	tags := []struct {
 		label  string
@@ -207,6 +215,7 @@ func printDistribution(metrics map[string]float64, keys ...labelPrefix) {
 	}
 }
 
+// packetDecoder decodes packets and hands them off to the streamRouter
 func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
 	for pkt := range packetsIn {
 		pkt.Decode()
@@ -218,6 +227,11 @@ func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
 	}
 }
 
+// processor tries to parse an http request or response from each packet,
+// and if successful it records metrics about it in the loghisto metric
+// system.  On successful parse of a response, it looks up a corresponding
+// request so that it can record statistics about http verbs / individual
+// paths being hit.
 func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 	reqTimers := map[uint32]loghisto.TimerToken{}
 	reqVerbTimers := map[uint32]loghisto.TimerToken{}
@@ -267,6 +281,12 @@ func processor(ms *loghisto.MetricSystem, packetsIn chan *pcap.Packet) {
 	}
 }
 
+// streamRouter takes a decoded packet and routes it to
+// a processor that will deal with all requests and responses
+// for this particular TCP connection.  This allows the
+// processor to own a local map of requests so that it
+// can avoid coordinating with other goroutines to perform
+// analysis.
 func streamRouter(
 	ports []uint16,
 	parsedPackets chan *pcap.Packet,
@@ -302,6 +322,12 @@ func streamRouter(
 	}
 }
 
+// 1. parse args
+// 2. start the prometheus listener if configured
+// 3. start the loghisto metric system
+// 4. start the processing and printing goroutines
+// 5. open the pcap handler
+// 6. hand off packets from the handler to the decoder
 func main() {
 	portsArg := flag.String("ports", "4001,2379", "etcd listening ports")
 	iface := flag.String("iface", "eth0", "interface for sniffing traffic on")

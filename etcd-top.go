@@ -87,7 +87,7 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 			if strings.HasPrefix(k, "timer ") {
 				if strings.HasSuffix(k, "_max") {
 					reqTimes = append(reqTimes, nameSum{
-						Name: strings.TrimSuffix(strings.TrimPrefix(k, "timer "), "_max"),
+						Name: strings.TrimSuffix(strings.TrimPrefix(k, "timer "), "_50"),
 						Sum:  v,
 					})
 				}
@@ -186,10 +186,6 @@ func printDistribution(metrics map[string]float64, keys ...labelPrefix) {
 		{"50th", "_50"},
 		{"75th", "_75"},
 		{"90th", "_90"},
-		{"99th", "_99"},
-		{"99.9th", "_99.9"},
-		{"99.99th", "_99.99"},
-		{"Max", "_max"},
 	}
 	for _, t := range tags {
 		fmt.Printf("%11s", t.label)
@@ -214,7 +210,11 @@ func printDistribution(metrics map[string]float64, keys ...labelPrefix) {
 func packetDecoder(packetsIn chan *pcap.Packet, packetsOut chan *pcap.Packet) {
 	for pkt := range packetsIn {
 		pkt.Decode()
-		packetsOut <- pkt
+		select {
+		case packetsOut <- pkt:
+		default:
+			fmt.Println("shedding at decoder!")
+		}
 	}
 }
 
@@ -293,7 +293,11 @@ func streamRouter(
 			// tcp stream to go to the same processor every time
 			// so that if we do proper packet reconstruction it will
 			// be easier.
-			processors[int(clientPort)%len(processors)] <- pkt
+			select {
+			case processors[int(clientPort)%len(processors)] <- pkt:
+			default:
+				fmt.Println("Shedding load at router!")
+			}
 		}
 	}
 }
@@ -338,15 +342,25 @@ func main() {
 	}
 	defer h.Close()
 
-	unparsedPackets := make(chan *pcap.Packet)
-	parsedPackets := make(chan *pcap.Packet)
+	portArray := strings.Split(*portsArg, ",")
+	dst := strings.Join(portArray, " or dst port ")
+	src := strings.Join(portArray, " or src port ")
+	filter := fmt.Sprintf("tcp and (dst port %s or src port %s)", dst, src)
+	fmt.Println("using bpf filter: ", filter)
+	if err := h.Setfilter(filter); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	unparsedPackets := make(chan *pcap.Packet, 10240)
+	parsedPackets := make(chan *pcap.Packet, 10240)
 	for i := 0; i < 5; i++ {
 		go packetDecoder(unparsedPackets, parsedPackets)
 	}
 
 	processors := []chan *pcap.Packet{}
-	for i := 0; i < 5; i++ {
-		p := make(chan *pcap.Packet)
+	for i := 0; i < 50; i++ {
+		p := make(chan *pcap.Packet, 10240)
 		processors = append(processors, p)
 		go processor(ms, p)
 	}
@@ -356,7 +370,11 @@ func main() {
 	for {
 		pkt := h.Next()
 		if pkt != nil {
-			unparsedPackets <- pkt
+			select {
+			case unparsedPackets <- pkt:
+			default:
+				fmt.Println("SHEDDING IN MAIN")
+			}
 		}
 	}
 }

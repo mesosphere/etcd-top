@@ -8,6 +8,7 @@ Latency measurements are heavily colored by skew in the collection system itself
 Request counts are fairly accurate, but still slightly lossy.
 
 Optionally, you can export HTTP latency metrics using prometheus by passing in `-prometheus-port=<port>`.  This is not for long-term metric collection, and will die due to a memory leaks eventually.
+
 usage:
 ```
   -iface="eth0": interface for sniffing traffic on

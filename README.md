@@ -7,7 +7,7 @@ Latency measurements are heavily colored by skew in the collection system itself
 
 Request counts are fairly accurate, but still slightly lossy.
 
-Optionally, you can export HTTP latency metrics using prometheus by passing in `-prometheus-port=<port>`.
+Optionally, you can export HTTP latency metrics using prometheus by passing in `-prometheus-port=<port>`.  This is not for long-term metric collection, and will die due to a memory leaks eventually.
 usage:
 ```
   -iface="eth0": interface for sniffing traffic on
@@ -31,9 +31,9 @@ Top 3 most popular http requests:
 
 Top 3 slowest individual http requests:
      Time Request
-112.672956ms GET /v2/keys/k_max
-106.111394ms PUT /v2/keys/q_max
-87.749786ms GET /v2/keys/d_max
+112.672956ms GET /v2/keys/k
+106.111394ms PUT /v2/keys/q
+87.749786ms GET /v2/keys/d
 
 Top 3 total time spent in requests:
      Time Request

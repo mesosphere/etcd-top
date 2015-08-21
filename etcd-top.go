@@ -88,7 +88,7 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 				continue
 			}
 			if strings.HasPrefix(k, "timer ") {
-				if strings.HasSuffix(k, "_max") {
+				if strings.HasSuffix(k, "_50") {
 					reqTimes = append(reqTimes, nameSum{
 						Name: strings.TrimSuffix(strings.TrimPrefix(k, "timer "), "_50"),
 						Sum:  v,

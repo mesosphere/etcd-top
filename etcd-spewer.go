@@ -90,7 +90,7 @@ func main() {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	zipf := rand.NewZipf(r, 3.14, 2.72, 500000)
 	go reporter(metricStream)
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 5; i++ {
 		go func() {
 			client := etcd.NewClient(machines)
 

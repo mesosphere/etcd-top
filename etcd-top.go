@@ -135,9 +135,9 @@ func statPrinter(metricStream chan *loghisto.ProcessedMetricSet, topK, period ui
 		}
 		sort.Sort(nvs)
 		fmt.Printf("Top %d most popular http requests:\n", topK)
-		fmt.Println("     Sum     Rate Verb Path")
+		fmt.Println("Total Sum  Period Sum Verb Path")
 		for _, nv := range nvs[0:int(math.Min(float64(len(nvs)), float64(topK)))] {
-			fmt.Printf("%8.1d %8.1d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
+			fmt.Printf("%9.1d %7.1d %s\n", int(nv.Sum), int(nv.Rate), nv.Name)
 		}
 		sort.Sort(reqTimes)
 		fmt.Printf("\nTop %d slowest individual http requests:\n", topK)
